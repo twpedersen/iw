@@ -362,6 +362,16 @@ char *channel_width_name(enum nl80211_chan_width width)
 		return "5 MHz";
 	case NL80211_CHAN_WIDTH_10:
 		return "10 MHz";
+	case NL80211_CHAN_WIDTH_1:
+		return "1 MHz";
+	case NL80211_CHAN_WIDTH_2:
+		return "2 MHz";
+	case NL80211_CHAN_WIDTH_4:
+		return "4 MHz";
+	case NL80211_CHAN_WIDTH_8:
+		return "8 MHz";
+	case NL80211_CHAN_WIDTH_16:
+		return "16 MHz";
 	default:
 		return "unknown";
 	}
@@ -410,17 +420,23 @@ static int print_iface_handler(struct nl_msg *msg, void *arg)
 	if (!wiphy && tb_msg[NL80211_ATTR_WIPHY])
 		printf("%s\twiphy %d\n", indent, nla_get_u32(tb_msg[NL80211_ATTR_WIPHY]));
 	if (tb_msg[NL80211_ATTR_WIPHY_FREQ]) {
-		uint32_t freq = nla_get_u32(tb_msg[NL80211_ATTR_WIPHY_FREQ]);
+		float freq_khz = MHZ_TO_KHZ(nla_get_u32(tb_msg[NL80211_ATTR_WIPHY_FREQ]));
+		if (tb_msg[NL80211_ATTR_WIPHY_FREQ_OFFSET])
+			freq_khz += nla_get_u32(tb_msg[NL80211_ATTR_WIPHY_FREQ_OFFSET]);
 
-		printf("%s\tchannel %d (%d MHz)", indent,
-		       ieee80211_frequency_to_channel(freq), freq);
+		printf("%s\tchannel %d (%g MHz)", indent,
+		       ieee80211_freq_khz_to_channel((uint32_t) freq_khz),
+		       KHZ_TO_MHZ(freq_khz));
 
 		if (tb_msg[NL80211_ATTR_CHANNEL_WIDTH]) {
 			printf(", width: %s",
 				channel_width_name(nla_get_u32(tb_msg[NL80211_ATTR_CHANNEL_WIDTH])));
-			if (tb_msg[NL80211_ATTR_CENTER_FREQ1])
-				printf(", center1: %d MHz",
-					nla_get_u32(tb_msg[NL80211_ATTR_CENTER_FREQ1]));
+			if (tb_msg[NL80211_ATTR_CENTER_FREQ1]) {
+				freq_khz = MHZ_TO_KHZ(nla_get_u32(tb_msg[NL80211_ATTR_CENTER_FREQ1]));
+				if (tb_msg[NL80211_ATTR_CENTER_FREQ1_OFFSET])
+					freq_khz += nla_get_u32(tb_msg[NL80211_ATTR_CENTER_FREQ1_OFFSET]);
+				printf(", center1: %g MHz", KHZ_TO_MHZ(freq_khz));
+			}
 			if (tb_msg[NL80211_ATTR_CENTER_FREQ2])
 				printf(", center2: %d MHz",
 					nla_get_u32(tb_msg[NL80211_ATTR_CENTER_FREQ2]));

@@ -161,7 +161,7 @@ const char *command_name(enum nl80211_commands cmd)
 	return cmdbuf;
 }
 
-int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
+int ieee80211_channel_to_freq_khz(int chan, enum nl80211_band band)
 {
 	/* see 802.11 17.3.8.3.2 and Annex J
 	 * there are overlapping channel numbers in 5GHz and 2GHz bands */
@@ -170,26 +170,29 @@ int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
 	switch (band) {
 	case NL80211_BAND_2GHZ:
 		if (chan == 14)
-			return 2484;
+			return MHZ_TO_KHZ(2484);
 		else if (chan < 14)
-			return 2407 + chan * 5;
+			return MHZ_TO_KHZ(2407 + chan * 5);
 		break;
 	case NL80211_BAND_5GHZ:
 		if (chan >= 182 && chan <= 196)
-			return 4000 + chan * 5;
+			return MHZ_TO_KHZ(4000 + chan * 5);
 		else
-			return 5000 + chan * 5;
+			return MHZ_TO_KHZ(5000 + chan * 5);
 		break;
 	case NL80211_BAND_6GHZ:
 		/* see 802.11ax D6.1 27.3.23.2 */
 		if (chan == 2)
-			return 5935;
+			return MHZ_TO_KHZ(5935);
 		if (chan <= 253)
-			return 5950 + chan * 5;
+			return MHZ_TO_KHZ(5950 + chan * 5);
 		break;
 	case NL80211_BAND_60GHZ:
 		if (chan < 7)
-			return 56160 + chan * 2160;
+			return MHZ_TO_KHZ(56160 + chan * 2160);
+		break;
+	case NL80211_BAND_S1GHZ:
+		return chan * 500 + 902000;
 		break;
 	default:
 		;
@@ -197,15 +200,20 @@ int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
 	return 0; /* not supported */
 }
 
-int ieee80211_frequency_to_channel(int freq)
+int ieee80211_freq_khz_to_channel(int freq)
 {
 	/* see 802.11-2007 17.3.8.3.2 and Annex J */
-	if (freq == 2484)
+	if (freq == MHZ_TO_KHZ(2484))
 		return 14;
 	/* see 802.11ax D6.1 27.3.23.2 and Annex E */
-	else if (freq == 5935)
+	else if (freq == MHZ_TO_KHZ(5935))
 		return 2;
-	else if (freq < 2484)
+	else if (freq < MHZ_TO_KHZ(1000))
+		return (freq - 902000) / 500;
+
+	/* easier just to switch units */
+	freq = KHZ_TO_MHZ(freq);
+	if (freq < 2484)
 		return (freq - 2407) / 5;
 	else if (freq >= 4910 && freq <= 4980)
 		return (freq - 4000) / 5;
@@ -218,6 +226,11 @@ int ieee80211_frequency_to_channel(int freq)
 		return (freq - 56160) / 2160;
 	else
 		return 0;
+}
+
+int ieee80211_frequency_to_channel(int freq)
+{
+	return ieee80211_freq_khz_to_channel(MHZ_TO_KHZ(freq));
 }
 
 void print_ssid_escaped(const uint8_t len, const uint8_t *data)
@@ -464,8 +477,13 @@ enum nl80211_chan_width str_to_bw(const char *str)
 		const char *name;
 		unsigned int val;
 	} bwmap[] = {
+		{ .name = "1", .val = NL80211_CHAN_WIDTH_1, },
+		{ .name = "2", .val = NL80211_CHAN_WIDTH_2, },
+		{ .name = "4", .val = NL80211_CHAN_WIDTH_4, },
 		{ .name = "5", .val = NL80211_CHAN_WIDTH_5, },
+		{ .name = "8", .val = NL80211_CHAN_WIDTH_8, },
 		{ .name = "10", .val = NL80211_CHAN_WIDTH_10, },
+		{ .name = "16", .val = NL80211_CHAN_WIDTH_16, },
 		{ .name = "20", .val = NL80211_CHAN_WIDTH_20, },
 		{ .name = "40", .val = NL80211_CHAN_WIDTH_40, },
 		{ .name = "80", .val = NL80211_CHAN_WIDTH_80, },
@@ -578,10 +596,10 @@ static int parse_freqs(struct chandef *chandef, int argc, char **argv,
  * user by giving "NOHT" instead.
  *
  * The working specifier if chan is set are:
- *   <channel> [NOHT|HT20|HT40+|HT40-|5MHz|10MHz|80MHz|160MHz]
+ *   <channel> [NOHT|HT20|HT40+|HT40-|1MHz|2MHz|4MHz|5MHz|8MHz|10MHz|16MHz|80MHz|160MHz]
  *
  * And if frequency is set:
- *   <freq> [NOHT|HT20|HT40+|HT40-|5MHz|10MHz|80MHz|160MHz]
+ *   <freq> [NOHT|HT20|HT40+|HT40-|1MHz|2MHz|4MHz|5MHz|10MHz|80MHz|160MHz]
  *   <control freq> [5|10|20|40|80|80+80|160] [<center1_freq> [<center2_freq>]]
  *
  * If the mode/channel width is not given the NOHT is assumed.
@@ -609,12 +627,32 @@ int parse_freqchan(struct chandef *chandef, bool chan, int argc, char **argv,
 		  .width = NL80211_CHAN_WIDTH_20_NOHT,
 		  .freq1_diff = 0,
 		  .chantype = NL80211_CHAN_NO_HT },
+		{ .name = "1MHz",
+		  .width = NL80211_CHAN_WIDTH_1,
+		  .freq1_diff = 0,
+		  .chantype = -1 },
+		{ .name = "2MHz",
+		  .width = NL80211_CHAN_WIDTH_2,
+		  .freq1_diff = 0,
+		  .chantype = -1 },
+		{ .name = "4MHz",
+		  .width = NL80211_CHAN_WIDTH_4,
+		  .freq1_diff = 0,
+		  .chantype = -1 },
 		{ .name = "5MHz",
 		  .width = NL80211_CHAN_WIDTH_5,
 		  .freq1_diff = 0,
 		  .chantype = -1 },
+		{ .name = "8MHz",
+		  .width = NL80211_CHAN_WIDTH_8,
+		  .freq1_diff = 0,
+		  .chantype = -1 },
 		{ .name = "10MHz",
 		  .width = NL80211_CHAN_WIDTH_10,
+		  .freq1_diff = 0,
+		  .chantype = -1 },
+		{ .name = "16MHz",
+		  .width = NL80211_CHAN_WIDTH_16,
 		  .freq1_diff = 0,
 		  .chantype = -1 },
 		{ .name = "80MHz",
@@ -631,6 +669,7 @@ int parse_freqchan(struct chandef *chandef, bool chan, int argc, char **argv,
 	unsigned int i;
 	int _parsed = 0;
 	int res = 0;
+	int is_11ah = 0;
 
 	if (argc < 1)
 		return 1;
@@ -647,16 +686,6 @@ int parse_freqchan(struct chandef *chandef, bool chan, int argc, char **argv,
 
 	memset(chandef, 0, sizeof(struct chandef));
 
-	if (chan) {
-		enum nl80211_band band;
-
-		band = freq <= 14 ? NL80211_BAND_2GHZ : NL80211_BAND_5GHZ;
-		freq = ieee80211_channel_to_frequency(freq, band);
-	}
-	chandef->control_freq = freq;
-	/* Assume 20MHz NOHT channel for now. */
-	chandef->center_freq1 = freq;
-
 	/* Try to parse HT mode definitions */
 	if (argc > 1) {
 		for (i = 0; i < ARRAY_SIZE(chanmode); i++) {
@@ -668,9 +697,31 @@ int parse_freqchan(struct chandef *chandef, bool chan, int argc, char **argv,
 		}
 	}
 
+	is_11ah = chanmode_selected ?
+			chanmode_selected->width == NL80211_CHAN_WIDTH_1 ||
+			chanmode_selected->width == NL80211_CHAN_WIDTH_2 ||
+			chanmode_selected->width == NL80211_CHAN_WIDTH_4 ||
+			chanmode_selected->width == NL80211_CHAN_WIDTH_8 ||
+			chanmode_selected->width == NL80211_CHAN_WIDTH_16 : 0;
+
+	if (chan) {
+		enum nl80211_band band;
+
+		if (is_11ah)
+			band = NL80211_BAND_S1GHZ;
+		else
+			band = freq <= 14 ? NL80211_BAND_2GHZ : NL80211_BAND_5GHZ;
+		freq = ieee80211_channel_to_freq_khz(freq, band);
+	} else
+		freq = MHZ_TO_KHZ(freq);
+
+	chandef->control_freq_khz = freq;
+
 	/* channel mode given, use it and return. */
 	if (chanmode_selected) {
-		chandef->center_freq1 = get_cf1(chanmode_selected, freq);
+		if (!is_11ah)
+			chandef->center_freq1 =
+				get_cf1(chanmode_selected, KHZ_TO_MHZ(freq));
 		chandef->width = chanmode_selected->width;
 		goto out;
 	}
@@ -694,7 +745,9 @@ int parse_freqchan(struct chandef *chandef, bool chan, int argc, char **argv,
 
 int put_chandef(struct nl_msg *msg, struct chandef *chandef)
 {
-	NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ, chandef->control_freq);
+	NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ,
+			KHZ_TO_MHZ(chandef->control_freq_khz));
+	NLA_PUT_U32(msg, NL80211_ATTR_WIPHY_FREQ_OFFSET, chandef->control_freq_khz % 1000);
 	NLA_PUT_U32(msg, NL80211_ATTR_CHANNEL_WIDTH, chandef->width);
 
 	switch (chandef->width) {
@@ -709,7 +762,8 @@ int put_chandef(struct nl_msg *msg, struct chandef *chandef)
 			    NL80211_CHAN_HT20);
 		break;
 	case NL80211_CHAN_WIDTH_40:
-		if (chandef->control_freq > chandef->center_freq1)
+		if (KHZ_TO_MHZ(chandef->control_freq_khz) >
+		    chandef->center_freq1)
 			NLA_PUT_U32(msg,
 				    NL80211_ATTR_WIPHY_CHANNEL_TYPE,
 				    NL80211_CHAN_HT40MINUS);

@@ -96,10 +96,13 @@ struct chanmode {
 struct chandef {
 	enum nl80211_chan_width width;
 
-	unsigned int control_freq;
+	unsigned int control_freq_khz;
 	unsigned int center_freq1;
 	unsigned int center_freq2;
 };
+
+#define KHZ_TO_MHZ(f) ((f) / 1000)
+#define MHZ_TO_KHZ(f) ((f) * 1000)
 
 #define ARRAY_SIZE(ar) (sizeof(ar)/sizeof(ar[0]))
 #define DIV_ROUND_UP(x, y) (((x) + (y - 1)) / (y))
@@ -223,6 +226,7 @@ void print_iftype_line(struct nlattr *attr);
 const char *command_name(enum nl80211_commands cmd);
 int ieee80211_channel_to_frequency(int chan, enum nl80211_band band);
 int ieee80211_frequency_to_channel(int freq);
+int ieee80211_freq_khz_to_channel(int freq);
 
 void print_ssid_escaped(const uint8_t len, const uint8_t *data);
 

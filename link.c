@@ -83,9 +83,13 @@ static int link_bss_handler(struct nl_msg *msg, void *arg)
 			  nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]),
 			  false, PRINT_LINK);
 
-	if (bss[NL80211_BSS_FREQUENCY])
-		printf("\tfreq: %d\n",
-			nla_get_u32(bss[NL80211_BSS_FREQUENCY]));
+	if (bss[NL80211_BSS_FREQUENCY]) {
+		float freq_khz;
+		freq_khz = MHZ_TO_KHZ(nla_get_u32(bss[NL80211_BSS_FREQUENCY]));
+		if (nla_get_u32(bss[NL80211_BSS_FREQUENCY_OFFSET]))
+			freq_khz += nla_get_u32(bss[NL80211_BSS_FREQUENCY_OFFSET]);
+		printf("\tfreq: %g\n", KHZ_TO_MHZ(freq_khz));
+	}
 
 	if (nla_get_u32(bss[NL80211_BSS_STATUS]) != NL80211_BSS_STATUS_ASSOCIATED)
 		return NL_SKIP;

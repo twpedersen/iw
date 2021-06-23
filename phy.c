@@ -86,14 +86,17 @@ static int print_channels_handler(struct nl_msg *msg, void *arg)
 
 			if (tb_band[NL80211_BAND_ATTR_FREQS]) {
 				nla_for_each_nested(nl_freq, tb_band[NL80211_BAND_ATTR_FREQS], rem_freq) {
-					uint32_t freq;
+					float freq_khz;
 
 					nla_parse(tb_freq, NL80211_FREQUENCY_ATTR_MAX, nla_data(nl_freq), nla_len(nl_freq), NULL);
 
 					if (!tb_freq[NL80211_FREQUENCY_ATTR_FREQ])
 						continue;
-					freq = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]);
-					printf("\t* %d MHz [%d] ", freq, ieee80211_frequency_to_channel(freq));
+					freq_khz = MHZ_TO_KHZ(nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]));
+					if (tb_freq[NL80211_FREQUENCY_ATTR_OFFSET])
+						freq_khz += nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_OFFSET]);
+					printf("\t* %g MHz [%d] ", KHZ_TO_MHZ(freq_khz),
+					       ieee80211_freq_khz_to_channel((uint32_t)freq_khz));
 
 					if (tb_freq[NL80211_FREQUENCY_ATTR_DISABLED]) {
 						printf("(disabled)\n");
@@ -199,13 +202,13 @@ static int handle_freq(struct nl80211_state *state, struct nl_msg *msg,
 }
 
 COMMAND(set, freq,
-	"<freq> [NOHT|HT20|HT40+|HT40-|5MHz|10MHz|80MHz|160MHz]\n"
+	"<freq> [NOHT|HT20|HT40+|HT40-|1MHz|2MHz|4MHz|5MHz|8MHz|10MHz|16MHz|80MHz|160MHz]\n"
 	"<control freq> [5|10|20|40|80|80+80|160] [<center1_freq> [<center2_freq>]]",
 	NL80211_CMD_SET_WIPHY, 0, CIB_PHY, handle_freq,
 	"Set frequency/channel the hardware is using, including HT\n"
 	"configuration.");
 COMMAND(set, freq,
-	"<freq> [NOHT|HT20|HT40+|HT40-|5MHz|10MHz|80MHz|160MHz]\n"
+	"<freq> [NOHT|HT20|HT40+|HT40-|1MHz|2MHz|4MHz|5MHz|8MHz|10MHz|16MHz|80MHz|160MHz]\n"
 	"<control freq> [5|10|20|40|80|80+80|160] [<center1_freq> [<center2_freq>]]",
 	NL80211_CMD_SET_WIPHY, 0, CIB_NETDEV, handle_freq, NULL);
 
@@ -222,9 +225,9 @@ static int handle_chan(struct nl80211_state *state, struct nl_msg *msg,
 
 	return put_chandef(msg, &chandef);
 }
-COMMAND(set, channel, "<channel> [NOHT|HT20|HT40+|HT40-|5MHz|10MHz|80MHz|160MHz]",
+COMMAND(set, channel, "<channel> [NOHT|HT20|HT40+|HT40-|1MHz|2MHz|4MHz|5MHz|8MHz|10MHz|16MHz|80MHz|160MHz]",
 	NL80211_CMD_SET_WIPHY, 0, CIB_PHY, handle_chan, NULL);
-COMMAND(set, channel, "<channel> [NOHT|HT20|HT40+|HT40-|5MHz|10MHz|80MHz|160MHz]",
+COMMAND(set, channel, "<channel> [NOHT|HT20|HT40+|HT40-|1MHz|2MHz|4MHz|5MHz|8MHz|10MHz|16MHz|80MHz|160MHz]",
 	NL80211_CMD_SET_WIPHY, 0, CIB_NETDEV, handle_chan, NULL);
 
 
@@ -350,7 +353,7 @@ static int handle_cac(struct nl80211_state *state,
 		goto err_out;
 
 	cac_event.ret = 1;
-	cac_event.freq = chandef.control_freq;
+	cac_event.freq = KHZ_TO_MHZ(chandef.control_freq_khz);
 
 	__prepare_listen_events(state);
 	nl_socket_set_cb(state->nl_sock, radar_cb);

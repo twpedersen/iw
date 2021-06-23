@@ -2416,6 +2416,7 @@ static int print_bss_handler(struct nl_msg *msg, void *arg)
 	static struct nla_policy bss_policy[NL80211_BSS_MAX + 1] = {
 		[NL80211_BSS_TSF] = { .type = NLA_U64 },
 		[NL80211_BSS_FREQUENCY] = { .type = NLA_U32 },
+		[NL80211_BSS_FREQUENCY_OFFSET] = { .type = NLA_U32 },
 		[NL80211_BSS_BSSID] = { },
 		[NL80211_BSS_BEACON_INTERVAL] = { .type = NLA_U16 },
 		[NL80211_BSS_CAPABILITY] = { .type = NLA_U16 },
@@ -2487,9 +2488,12 @@ static int print_bss_handler(struct nl_msg *msg, void *arg)
 			(tsf/1000/1000/60) % 60, (tsf/1000/1000) % 60);
 	}
 	if (bss[NL80211_BSS_FREQUENCY]) {
-		int freq = nla_get_u32(bss[NL80211_BSS_FREQUENCY]);
-		printf("\tfreq: %d\n", freq);
-		if (freq > 45000)
+		float freq_khz;
+		freq_khz = MHZ_TO_KHZ(nla_get_u32(bss[NL80211_BSS_FREQUENCY]));
+		if (nla_get_u32(bss[NL80211_BSS_FREQUENCY_OFFSET]))
+			freq_khz += nla_get_u32(bss[NL80211_BSS_FREQUENCY_OFFSET]);
+		printf("\tfreq: %g\n", KHZ_TO_MHZ(freq_khz));
+		if (freq_khz > MHZ_TO_KHZ(45000))
 			is_dmg = true;
 	}
 	if (bss[NL80211_BSS_BEACON_INTERVAL])

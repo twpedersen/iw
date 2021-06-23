@@ -89,6 +89,7 @@ static int print_phy_handler(struct nl_msg *msg, void *arg)
 	struct nlattr *tb_freq[NL80211_FREQUENCY_ATTR_MAX + 1];
 	static struct nla_policy freq_policy[NL80211_FREQUENCY_ATTR_MAX + 1] = {
 		[NL80211_FREQUENCY_ATTR_FREQ] = { .type = NLA_U32 },
+		[NL80211_FREQUENCY_ATTR_OFFSET] = { .type = NLA_U32 },
 		[NL80211_FREQUENCY_ATTR_DISABLED] = { .type = NLA_FLAG },
 		[NL80211_FREQUENCY_ATTR_NO_IR] = { .type = NLA_FLAG },
 		[__NL80211_FREQUENCY_ATTR_NO_IBSS] = { .type = NLA_FLAG },
@@ -179,13 +180,16 @@ static int print_phy_handler(struct nl_msg *msg, void *arg)
 					band_had_freq = true;
 				}
 				nla_for_each_nested(nl_freq, tb_band[NL80211_BAND_ATTR_FREQS], rem_freq) {
-					uint32_t freq;
+					float freq_khz;
 					nla_parse(tb_freq, NL80211_FREQUENCY_ATTR_MAX, nla_data(nl_freq),
 						  nla_len(nl_freq), freq_policy);
 					if (!tb_freq[NL80211_FREQUENCY_ATTR_FREQ])
 						continue;
-					freq = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]);
-					printf("\t\t\t* %d MHz [%d]", freq, ieee80211_frequency_to_channel(freq));
+					freq_khz = MHZ_TO_KHZ(nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]));
+					if (tb_freq[NL80211_FREQUENCY_ATTR_OFFSET])
+						freq_khz += nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_OFFSET]);
+					printf("\t\t\t* %g MHz [%d]", KHZ_TO_MHZ(freq_khz),
+						ieee80211_freq_khz_to_channel((uint32_t) freq_khz));
 
 					if (tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER] &&
 					    !tb_freq[NL80211_FREQUENCY_ATTR_DISABLED])
@@ -196,6 +200,17 @@ static int print_phy_handler(struct nl_msg *msg, void *arg)
 						print_flag("disabled", &open);
 						goto next;
 					}
+
+					if (tb_freq[NL80211_FREQUENCY_ATTR_1MHZ])
+						print_flag("1MHz", &open);
+					if (tb_freq[NL80211_FREQUENCY_ATTR_2MHZ])
+						print_flag("2MHz", &open);
+					if (tb_freq[NL80211_FREQUENCY_ATTR_4MHZ])
+						print_flag("4MHz", &open);
+					if (tb_freq[NL80211_FREQUENCY_ATTR_8MHZ])
+						print_flag("8MHz", &open);
+					if (tb_freq[NL80211_FREQUENCY_ATTR_16MHZ])
+						print_flag("16MHz", &open);
 
 					/* If both flags are set assume an new kernel */
 					if (tb_freq[NL80211_FREQUENCY_ATTR_NO_IR] && tb_freq[__NL80211_FREQUENCY_ATTR_NO_IBSS]) {
